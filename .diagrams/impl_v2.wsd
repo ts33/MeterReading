@@ -1,0 +1,60 @@
+@startuml
+title NMI File Processing V2
+
+
+boundary Caller
+
+box "File Processor" #LightBlue
+participant "Main" as fp
+participant "Jobs Worker Pool" as fp_thread_job
+participant "Results Worker Pool" as fp_thread_result
+end box
+
+database "Database" as db
+boundary "Monitoring" as alert
+
+== File Processing ==
+Caller -> fp ++ : Process File Event\n(ProcessNmiFile)
+
+fp -> db ++ : Create FileProcessing Record\n(tracks status of file processing)
+return
+
+fp -> fp_thread_job ++ : Create Job Threads
+fp -> fp_thread_result ++ : Create Result Threads
+
+fp -> fp : Read File
+loop for each NMI 200 block in NMI File
+    fp -> fp_thread_job : processNmiBlock(NmiBlockRecords, Nmi)
+    loop for each NMI 300 record in NMI 200 block
+        fp_thread_job -> fp_thread_job : sum up NMI consumption
+        fp_thread_job -> fp_thread_job : create MeterReading models
+    end
+    fp_thread_job -> fp_thread_result : send MeterReading models
+    fp_thread_job -> db++ : Insert MeterReadings in Bulk
+    return
+end
+
+fp -> fp_thread_job : Close Job Threads
+deactivate fp_thread_job
+fp -> fp_thread_result : Close Result Threads
+deactivate fp_thread_result
+
+fp -> db ++ : Query MeterReadings \n(for reconciliation)
+return
+
+fp -> db ++ : Update FileProcessing Record\n(tracks status of file processing)
+return
+deactivate fp
+
+
+== File Processing Monitor ==
+
+fp -> db ++ : Query FileProcessing Records
+activate fp
+return
+loop for each incomplete/missing FileProcessing record
+    fp -> alert : raise an alert
+end
+deactivate fp
+
+@enduml

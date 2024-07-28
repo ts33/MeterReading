@@ -1,0 +1,40 @@
+@startuml
+title NMI File Processing V1
+
+
+boundary Caller
+
+box "File Processor" #LightBlue
+participant "Main" as fp
+participant "Jobs Worker Pool" as fp_thread_job
+participant "Results Worker Pool" as fp_thread_result
+end box
+
+database "Database" as db
+
+
+Caller -> fp ++ : Invoke Process File Function\n(ProcessNmiFile)
+
+fp -> fp_thread_job ++ : Create Job Threads
+fp -> fp_thread_result ++ : Create Result Threads
+
+fp -> fp : Read File
+loop for each NMI 200 block in NMI File
+    fp -> fp_thread_job : processNmiBlock(NmiBlockRecords, Nmi)
+    loop for each NMI 300 record in NMI 200 block
+        fp_thread_job -> fp_thread_job : sum up NMI consumption
+        fp_thread_job -> fp_thread_job : create MeterReading models
+    end
+    fp_thread_job -> fp_thread_result : send MeterReading models
+end
+
+fp -> fp_thread_job : Close Job Threads
+deactivate fp_thread_job
+fp -> fp_thread_result : Close Result Threads
+deactivate fp_thread_result
+fp -> fp : consolidate MeterReadings
+fp -> db++ : Insert MeterReadings in Bulk
+return
+return
+
+@enduml
